@@ -9,30 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
-
-func generatePairings(names map[string]bool) map[string]string {
-	pairings := make(map[string]string)
-
-	for key := range names {
-		rand.Seed(time.Now().Unix())
-
-		assignee := ""
-		for assignee == "" || names[assignee] {
-			assignee = maps.Keys(names)[rand.Intn(len(names))]
-		}
-
-		if assignee == key {
-			break
-		}
-
-		pairings[key] = assignee
-		names[assignee] = true
-	}
-	return pairings
-}
 
 func shuffleCards(n int) []int {
 	cards := make([]int, n)
@@ -92,26 +70,14 @@ func main() {
 		names[line] = [2]int{0, 0}
 	}
 
-	// fmt.Println("names:")
-	// for key, value := range names {
-	// 	fmt.Println(key, value)
-	// }
-
-	// fmt.Printf("there are %d of you \n", len(names))
-	// fmt.Println(len(names))
 	if len(names) <= 2 {
 		fmt.Println("there's too few of you!")
 	} else {
 		shuffledCards := shuffleCards(len(names))
 
 		shift := cutAndShiftCards(shuffledCards)
-		// fmt.Println("shift:")
-		// fmt.Println(shift)
-		// fmt.Println("cards:")
-		// fmt.Println(shuffledCards)
 
 		assigned := drawCards(names, shift, shuffledCards)
-		// fmt.Println(assigned)
 
 		fmt.Println("what's your name?")
 		fmt.Println("---------------------")
@@ -146,40 +112,4 @@ func main() {
 			fmt.Printf("\r                                                                              \n")
 		}
 	}
-
-	// reader := bufio.NewReader(os.Stdin)
-	// fmt.Println("input santa names <3")
-	// fmt.Println("---------------------")
-
-	// var names = make(map[string]bool)
-	// for {
-	// 	line, err := reader.ReadString('\n')
-	// 	line = strings.Replace(line, "\n", "", -1)
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	if len(strings.TrimSpace(line)) == 0 {
-	// 		break
-	// 	}
-	// 	names[line] = false
-	// }
-	// // shuffle input
-
-	// fmt.Println("names:")
-	// for key, value := range names {
-	// 	fmt.Println(key, value)
-	// }
-
-	// var pairings = make(map[string]string)
-	// for len(names) != len(pairings) {
-	// 	for name := range names {
-	// 		names[name] = false
-	// 	}
-	// 	pairings = generatePairings(names)
-	// }
-
-	// fmt.Println("pairings:")
-	// for key, value := range pairings {
-	// 	fmt.Println(key, value)
-	// }
 }
