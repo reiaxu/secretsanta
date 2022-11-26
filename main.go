@@ -2,114 +2,143 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"log"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slices"
+	"math/rand"
 )
 
-func shuffleCards(n int) []int {
-	cards := make([]int, n)
+func makeDeck(numCards int) []int {
+	cards := make([]int, numCards)
 	for i := range cards {
-		cards[i] = i + 1
+		cards[i] = i
 	}
 
 	rand.Shuffle(len(cards), func(i, j int) {
 		cards[i], cards[j] = cards[j], cards[i]
 	})
+
 	return cards
 }
 
 func cutAndShiftCards(cards []int) []int {
-	card := cards[0]
-	cards = cards[1:]
-	cards = append(cards, card)
-	return cards
-}
-
-func drawCards(names map[string]([2]int), shift []int, cards []int) map[string]([2]int) {
-	assignedIndex := make([]int, 0)
-
-	for index, key := range names {
-		// go through index of cards and assign to random key in map which doesnt have value [0, 0]
-		if key == [2]int{0, 0} {
-			randIndex := -1
-			for randIndex == -1 || slices.Contains(assignedIndex, randIndex) {
-				randIndex = rand.Intn(len(cards))
-			}
-
-			names[index] = [2]int{shift[randIndex], cards[randIndex]}
-			assignedIndex = append(assignedIndex, randIndex)
-		}
+	if len(cards) <= 1 {
+		return cards
 	}
 
-	return names
+	shiftedCards := make([]int, 0, len(cards))
+	shiftedCards = append(shiftedCards, cards[len(cards)-1])
+	shiftedCards = append(shiftedCards, cards[0:len(cards)-1]...)
+
+	fmt.Println(shiftedCards)
+	return shiftedCards
+}
+
+// Exchange is a mapping of the giver to the receiver
+type Exchanges map[string]string
+
+func doExchange(names []string) Exchanges {
+	exchanges := make(Exchanges)
+	deck := makeDeck(len(names))
+	shiftedDeck := cutAndShiftCards(deck)
+	for i, giverIndex := range deck {
+		giverName := names[giverIndex]
+		receiverName := names[shiftedDeck[i]]
+		exchanges[giverName] = receiverName
+	}
+	return exchanges
+}
+
+type WriteFlusher interface {
+	Write(p []byte) (n int, err error)
+	Flush() error
+}
+
+func showExchanges(r io.Reader, w WriteFlusher, exchanges Exchanges) {
+	fmt.Println("Now it's time to reveal the exchanges...")
+	fmt.Println("what's your name?")
+	fmt.Println("---------------------")
+
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		giverName := strings.TrimSpace(scanner.Text())
+		if len(giverName) == 0 {
+			// Empty name entered
+			break
+		}
+
+		recieverName, giverInNames := exchanges[giverName]
+		if !giverInNames {
+			fmt.Fprintln(w, "Sorry, your name was not in the list...")
+			continue
+		}
+
+		fmt.Fprintf(w, "hello, %s \n", giverName)
+
+		buyingMsg := fmt.Sprintf("you're buying a gift for %s", recieverName)
+		fmt.Fprintf(w, "%s", buyingMsg)
+		if err := w.Flush(); err != nil {
+			panic(err)
+		}
+
+		time.Sleep(time.Second * 2)
+		fmt.Fprintf(w, "\r%s\n", strings.Repeat(" ", len(buyingMsg)+1))
+		if err := w.Flush(); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func acceptNames(r io.Reader) ([]string, error) {
+	fmt.Println("input santa names <3")
+	fmt.Println("---------------------")
+
+	scanner := bufio.NewScanner(r)
+	names := make(map[string]struct{})
+	for scanner.Scan() {
+		newName := strings.TrimSpace(scanner.Text())
+		if len(newName) == 0 {
+			// No more names
+			break
+		}
+
+		_, nameExists := names[newName]
+		if nameExists {
+			fmt.Println("This name has already been entered. Try again...")
+			continue
+		}
+
+		names[newName] = struct{}{}
+	}
+
+	if len(names) <= 2 {
+		return nil, errors.New("there's too few people")
+	}
+
+	nameList := make([]string, 0, len(names))
+	for name := range names {
+		nameList = append(nameList, name)
+	}
+	return nameList, nil
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("input santa names <3")
-	fmt.Println("---------------------")
-
-	names := make(map[string]([2]int))
-	for {
-		line, err := reader.ReadString('\n')
-		line = strings.Replace(line, "\n", "", -1)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if len(strings.TrimSpace(line)) == 0 {
-			break
-		}
-		names[line] = [2]int{0, 0}
+	names, err := acceptNames(reader)
+	if err != nil {
+		log.Fatalf("An error occurred: %v", err)
+		return
 	}
 
-	if len(names) <= 2 {
-		fmt.Println("there's too few of you!")
-	} else {
-		shuffledCards := shuffleCards(len(names))
+	exchanges := doExchange(names)
 
-		shift := cutAndShiftCards(shuffledCards)
-
-		assigned := drawCards(names, shift, shuffledCards)
-
-		fmt.Println("what's your name?")
-		fmt.Println("---------------------")
-
-		for {
-			yourName, err := reader.ReadString('\n')
-			yourName = strings.Replace(yourName, "\n", "", -1)
-			if err != nil {
-				log.Fatal(err)
-			}
-			yourName = strings.TrimSpace(yourName)
-			if len(yourName) == 0 {
-				break
-			}
-			fmt.Printf("hello, %s \n", yourName)
-
-			if assigned[yourName] == [2]int{0, 0} {
-				fmt.Println("you're not in the santa list!")
-			} else {
-				// yourIndex := assigned[yourName][0]
-				// fmt.Printf("your index is %d \n", yourIndex)
-				assigneeIndex := assigned[yourName][1]
-				// fmt.Printf("you're buying a gift for %d \n", assigneeIndex)
-				for key, value := range assigned {
-					if value[0] == assigneeIndex {
-						fmt.Printf("you're buying a gift for %s", key)
-					}
-				}
-			}
-
-			time.Sleep(time.Second * 2)
-			fmt.Printf("\r                                                                              \n")
-		}
-	}
+	writer := bufio.NewWriter(os.Stdout)
+	showExchanges(reader, writer, exchanges)
 }
